@@ -1,0 +1,1373 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>表抽出・Excel変換ツール</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<style>
+  :root{
+    --bg:#f1f5f9; --panel:#ffffff; --panel2:#f8fafc; --line:#e2e8f0; --line2:#cbd5e1;
+    --text:#0f172a; --muted:#64748b; --faint:#94a3b8;
+    --accent:#0f766e; --accent-h:#115e59; --accent-soft:#ccfbf1;
+    --red:#dc2626; --blue:#2563eb;
+    --ruler-bg:#e8edf3; --ruler-tick:#94a3b8; --ruler-text:#64748b;
+    --shadow:0 1px 3px rgba(15,23,42,.08),0 4px 14px rgba(15,23,42,.05);
+    --danger:#b91c1c; --danger-soft:#fef2f2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0b1120; --panel:#111827; --panel2:#0f172a; --line:#1f2937; --line2:#334155;
+      --text:#e5e7eb; --muted:#9ca3af; --faint:#6b7280;
+      --accent:#2dd4bf; --accent-h:#5eead4; --accent-soft:#134e4a;
+      --red:#f87171; --blue:#60a5fa;
+      --ruler-bg:#1e293b; --ruler-tick:#475569; --ruler-text:#94a3b8;
+      --shadow:0 1px 3px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+      --danger:#f87171; --danger-soft:#450a0a;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;overflow:hidden}
+  button{font:inherit;cursor:pointer}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;z-index:20}
+  .tb-group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .tb-sep{width:1px;height:24px;background:var(--line2);margin:0 2px}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--panel);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;line-height:1;white-space:nowrap;transition:background .12s,border-color .12s}
+  .btn:hover{background:var(--panel2)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary:hover{background:var(--accent-h)}
+  @media (prefers-color-scheme: dark){.btn.primary{color:#04211d}}
+  .btn.danger{color:var(--danger)}
+  .btn.danger:hover{background:var(--danger-soft)}
+  .btn.icon-only{padding:6px 8px}
+  .btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .excel-top{margin-left:auto}
+  .excel-top .btn.primary:disabled{opacity:.5}
+  .file-chip{display:none;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font-size:12.5px;max-width:280px}
+  .file-chip.show{display:inline-flex}
+  .file-chip .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .file-chip .fmeta{color:var(--muted);white-space:nowrap}
+  .pager{display:none;align-items:center;gap:4px}
+  .pager.show{display:inline-flex}
+  .pager span{font-size:12.5px;color:var(--muted);min-width:52px;text-align:center}
+  .zoom-label{font-size:12.5px;color:var(--muted);min-width:42px;text-align:center;font-variant-numeric:tabular-nums}
+  .thresh{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .thresh b{color:var(--text);font-weight:600;font-size:12.5px}
+  .thresh input[type=range]{width:104px;accent-color:var(--accent);margin:0}
+  .thresh .val{font-variant-numeric:tabular-nums;min-width:36px;color:var(--text);font-weight:600}
+  .thresh-note{font-size:11.5px;color:var(--faint)}
+
+  /* ---------- status bar ---------- */
+  .statusbar{background:var(--panel);border-bottom:1px solid var(--line);padding:5px 12px;display:flex;gap:14px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .statusbar .st-main{color:var(--text)}
+  .statusbar .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--faint);margin-right:5px;vertical-align:1px}
+  .statusbar .dot.ok{background:#16a34a}
+  .statusbar .dot.busy{background:#d97706}
+  .progress-wrap{display:none;flex:1;min-width:120px;max-width:340px;align-items:center;gap:8px}
+  .progress-wrap.show{display:flex}
+  .progress{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+  .progress > div{height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width .2s}
+
+  /* ---------- page-spanning bar ---------- */
+  .pagebar{background:var(--panel2);border-bottom:1px solid var(--line);padding:6px 12px;display:flex;gap:14px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .pagebar .pb-title{font-weight:700;color:var(--text);white-space:nowrap}
+  .pagebar label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)}
+  .pagebar input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;margin:0;cursor:pointer}
+  .pagebar .pb-note{color:var(--faint);font-size:12px}
+
+  /* ---------- workspace ---------- */
+  .workspace{flex:1;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,1fr);gap:0;min-height:0}
+  .viewer-pane{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line);background:var(--panel2)}
+  .pane-head{padding:8px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .pane-head h2{font-size:13px;margin:0;font-weight:700;letter-spacing:.02em}
+  .pane-head .hint{font-size:12px;color:var(--muted)}
+  .legend{margin-left:auto;display:flex;gap:12px;font-size:12px;color:var(--muted)}
+  .legend i{display:inline-block;width:16px;border-top:2px dashed var(--red);vertical-align:middle;margin-right:4px}
+  .legend i.h{border-top-color:var(--blue)}
+
+  .scroll{flex:1;overflow:auto;position:relative}
+  .stage-grid{display:grid;width:max-content;min-width:100%;grid-template-columns:30px max-content;grid-template-rows:30px max-content;padding:0 18px 18px 0}
+  .corner{position:sticky;top:0;left:0;z-index:6;background:var(--ruler-bg);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+  .ruler-x-cell{position:sticky;top:0;z-index:5;background:var(--ruler-bg);border-bottom:1px solid var(--line2)}
+  .ruler-y-cell{position:sticky;left:0;z-index:5;background:var(--ruler-bg);border-right:1px solid var(--line2)}
+  canvas.ruler{display:block;cursor:crosshair;touch-action:none}
+  .doc-wrap{position:relative;background:#fff;box-shadow:var(--shadow);line-height:0}
+  @media (prefers-color-scheme: dark){.doc-wrap{background:#fff}}
+  canvas.doc{display:block}
+  canvas.overlay{position:absolute;inset:0;display:block;touch-action:none}
+
+  /* ---------- preview pane ---------- */
+  .preview-pane{display:flex;flex-direction:column;min-width:0;background:var(--panel)}
+  .preview-scroll{flex:1;overflow:auto;padding:12px}
+  .preview-empty{border:1.5px dashed var(--line2);border-radius:10px;padding:28px 18px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
+  .preview-empty i{font-size:22px;color:var(--faint);display:block;margin-bottom:8px}
+  table.grid{border-collapse:collapse;width:100%;font-size:13px}
+  table.grid td{border:1px solid var(--line2);padding:6px 8px;min-width:56px;vertical-align:top;white-space:pre-wrap;word-break:break-word;background:var(--panel)}
+  table.grid tr:first-child td{background:var(--panel2);font-weight:600}
+  table.grid td:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--panel)}
+  .preview-foot{border-top:1px solid var(--line);padding:10px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel)}
+  .preview-foot .note{font-size:12px;color:var(--muted)}
+  .grid-tools{display:flex;gap:6px;flex-wrap:wrap}
+
+  /* ---------- drop zone (empty state) ---------- */
+  .empty-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto}
+  .dropzone{width:min(620px,100%);border:2px dashed var(--line2);border-radius:14px;background:var(--panel);padding:44px 28px;text-align:center;transition:border-color .15s,background .15s}
+  .dropzone.drag{border-color:var(--accent);background:var(--accent-soft)}
+  .dropzone .dz-icon{width:64px;height:64px;margin:0 auto 16px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--accent)}
+  .dropzone h1{font-size:19px;margin:0 0 8px;font-weight:700}
+  .dropzone p{margin:0 0 6px;color:var(--muted);font-size:13.5px;line-height:1.7}
+  .dropzone .formats{font-size:12px;color:var(--faint);margin-bottom:20px}
+  .howto{width:min(620px,100%);margin:18px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .howto .step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+  .howto .step b{display:block;color:var(--text);font-size:13px;margin-bottom:3px}
+  .howto .step .n{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11.5px;align-items:center;justify-content:center;margin-right:6px;vertical-align:-5px}
+  @media (prefers-color-scheme: dark){.howto .step .n{color:#04211d}}
+
+  .hidden{display:none !important}
+
+  @media (max-width:860px){
+    body{overflow:auto}
+    .workspace{grid-template-columns:1fr;grid-template-rows:58vh auto}
+    .viewer-pane{border-right:none;border-bottom:1px solid var(--line)}
+    .preview-pane{min-height:46vh}
+    .howto{grid-template-columns:1fr}
+    .legend{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ TOOLBAR ============ -->
+<div class="toolbar">
+  <div class="tb-group">
+    <button class="btn primary" id="btnOpen"><i class="fa-solid fa-folder-open"></i>ファイルを開く</button>
+    <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" class="hidden" />
+    <span class="file-chip" id="fileChip"><i class="fa-regular fa-file"></i><span class="fname" id="fileName"></span><span class="fmeta" id="fileMeta"></span></span>
+  </div>
+  <div class="tb-group excel-top">
+    <button class="btn primary" id="btnExcelTop" disabled title="先にファイルを読み込んでください"><i class="fa-solid fa-file-excel"></i>Excelでダウンロード</button>
+  </div>
+  <div class="tb-sep hidden" id="sep1"></div>
+  <div class="tb-group hidden" id="docTools">
+    <span class="pager" id="pager">
+      <button class="btn icon-only" id="btnPrevPage" title="前のページ"><i class="fa-solid fa-chevron-left"></i></button>
+      <span id="pageLabel">1 / 1</span>
+      <button class="btn icon-only" id="btnNextPage" title="次のページ"><i class="fa-solid fa-chevron-right"></i></button>
+    </span>
+    <button class="btn icon-only" id="btnZoomOut" title="縮小"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+    <span class="zoom-label" id="zoomLabel">100%</span>
+    <button class="btn icon-only" id="btnZoomIn" title="拡大"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+    <button class="btn" id="btnFit"><i class="fa-solid fa-arrows-left-right-to-line"></i>幅に合わせる</button>
+  </div>
+  <div class="tb-sep hidden" id="sep2"></div>
+  <div class="tb-group hidden" id="guideTools">
+    <button class="btn" id="btnUndo" title="ガイド線の操作を元に戻す（Ctrl+Z）" disabled><i class="fa-solid fa-rotate-left"></i>戻る</button>
+    <button class="btn" id="btnRedo" title="元に戻した操作をやり直す（Ctrl+Shift+Z）" disabled><i class="fa-solid fa-rotate-right"></i>進む</button>
+    <button class="btn" id="btnAuto"><i class="fa-solid fa-wand-magic-sparkles"></i>線を自動検出</button>
+    <button class="btn danger" id="btnClear"><i class="fa-solid fa-eraser"></i>すべての線を削除</button>
+  </div>
+  <div class="tb-sep hidden" id="sep3"></div>
+  <div class="tb-group hidden" id="threshTools">
+    <label class="thresh"><b>縦線の閾値</b><input type="range" id="rngV" min="5" max="100" step="5" value="50" /><span class="val" id="valV">50%</span></label>
+    <label class="thresh"><b>横線の閾値</b><input type="range" id="rngH" min="10" max="80" step="5" value="45" /><span class="val" id="valH">45%</span></label>
+    <span class="thresh-note">小さいほど弱い線も検出します（変更すると再検出）／ 縦は目盛りを調整済み：表示50%で実効40%相当</span>
+  </div>
+</div>
+
+<!-- ============ STATUS BAR ============ -->
+<div class="statusbar hidden" id="statusbar">
+  <span class="st-main"><span class="dot" id="statusDot"></span><span id="statusText">準備完了</span></span>
+  <span id="guideStats"></span>
+  <span id="extractMode"></span>
+  <span class="progress-wrap" id="progressWrap"><span id="progressLabel">処理中…</span><span class="progress"><div id="progressBar"></div></span></span>
+</div>
+
+<!-- ============ PAGE-SPANNING BAR ============ -->
+<div class="pagebar hidden" id="pageBar">
+  <span class="pb-title"><i class="fa-solid fa-layer-group"></i> ページ跨ぎ</span>
+  <label><input type="checkbox" id="chkCommon" />全ページで共通のガイド線を使う</label>
+  <button class="btn" id="btnApplyGuides"><i class="fa-solid fa-copy"></i>このページのガイド線を全ページに適用</button>
+  <label><input type="checkbox" id="chkCombine" />全ページを連結してプレビュー</label>
+  <label><input type="checkbox" id="chkDedupe" checked />2ページ目以降の見出し重複行を除外</label>
+  <span class="pb-note" id="pageBarNote"></span>
+</div>
+
+<!-- ============ EMPTY STATE ============ -->
+<div class="empty-wrap" id="emptyWrap">
+  <div style="width:min(620px,100%)">
+    <div class="dropzone" id="dropzone">
+      <div class="dz-icon"><i class="fa-solid fa-table-cells"></i></div>
+      <h1>PDF・画像から表を抽出</h1>
+      <p>表が写ったPDFや画像を、ここにドラッグ＆ドロップ<br />または下のボタンから選択してください。</p>
+      <p class="formats">対応形式：PDF（.pdf）／ PNG / JPEG / WebP 画像<br />ファイルはブラウザ内でのみ処理され、外部に送信されません。</p>
+      <button class="btn primary" id="btnOpen2" style="padding:9px 20px;font-size:14px"><i class="fa-solid fa-folder-open"></i>ファイルを選択</button>
+    </div>
+    <div class="howto">
+      <div class="step"><b><span class="n">1</span>読み込み</b>読み込むと、表の罫線と文字位置からガイド線が自動で引かれます。</div>
+      <div class="step"><b><span class="n">2</span>ガイド線を調整</b>上の定規クリックで縦線、左の定規クリックで横線を追加。線はドラッグで移動、定規上のマークをクリックで削除できます。</div>
+      <div class="step"><b><span class="n">3</span>確認して書き出し</b>右のプレビューでセルを直接編集し、Excel（.xlsx）でダウンロードします。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ WORKSPACE ============ -->
+<div class="workspace hidden" id="workspace">
+  <!-- Document viewer -->
+  <section class="viewer-pane">
+    <div class="pane-head">
+      <h2>ドキュメント</h2>
+      <span class="hint">定規をクリックで線を追加 ／ 線はドラッグで移動 ／ Ctrl+Zで戻る</span>
+      <span class="legend"><span><i></i>縦線（列）</span><span><i class="h"></i>横線（行）</span></span>
+    </div>
+    <div class="scroll" id="scroll">
+      <div class="stage-grid" id="stageGrid">
+        <div class="corner"></div>
+        <div class="ruler-x-cell"><canvas class="ruler" id="rulerX" height="30"></canvas></div>
+        <div class="ruler-y-cell"><canvas class="ruler" id="rulerY" width="30"></canvas></div>
+        <div class="doc-wrap" id="docWrap">
+          <canvas class="doc" id="docCanvas"></canvas>
+          <canvas class="overlay" id="overlay"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Preview -->
+  <section class="preview-pane">
+    <div class="pane-head">
+      <h2>抽出データプレビュー</h2>
+      <span class="hint">セルをクリックするとその場で編集できます</span>
+    </div>
+    <div class="preview-scroll" id="previewScroll">
+      <div class="preview-empty" id="previewEmpty"><i class="fa-regular fa-table"></i>ガイド線を配置すると、ここに抽出結果が表示されます。<br />PDFにテキスト情報がある場合は自動で読み取ります。画像の場合は「OCRで読み取る」を押してください。</div>
+      <div id="tableHost"></div>
+    </div>
+    <div class="preview-foot">
+      <div class="grid-tools">
+        <button class="btn" id="btnAddRow"><i class="fa-solid fa-plus"></i>行</button>
+        <button class="btn" id="btnAddCol"><i class="fa-solid fa-plus"></i>列</button>
+        <button class="btn" id="btnDelRow"><i class="fa-solid fa-minus"></i>最終行</button>
+        <button class="btn" id="btnDelCol"><i class="fa-solid fa-minus"></i>最終列</button>
+      </div>
+      <span class="note" id="ocrNote"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="btnOcr"><i class="fa-solid fa-font"></i>OCRで読み取る</button>
+      <button class="btn primary" id="btnExcel" disabled title="先にファイルを読み込んでください"><i class="fa-solid fa-file-excel"></i>Excelでダウンロード</button>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+'use strict';
+/* ================================================================
+   表抽出・Excel変換ツール
+   座標系：ガイド線は「ドキュメントピクセル座標」（描画キャンバスの
+   実ピクセル）で保持し、表示時は zoom を掛けて変換する。
+   ルーラー・本体・オーバーレイは同一スクロール領域内のグリッドに
+   配置されるため、スクロール・拡大率と常に 1:1 で同期する。
+   ================================================================ */
+
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+const state = {
+  fileName:'', fileBase:'table',
+  kind:null,               // 'pdf' | 'image'
+  pdfDoc:null, pageNum:1, pageCount:1,
+  docW:0, docH:0,          // ドキュメントピクセル寸法
+  zoom:1,
+  vGuides:[], hGuides:[],  // ドキュメント座標のガイド線
+  threshVDisplay:50,       // 縦線スライダーの表示値（%）。縦線は目盛りを再調整済みで、実効閾値 = 表示値 × 0.8
+  threshV:40, threshH:45,  // 自動検出の実効閾値（%：線と判定するために必要な暗ピクセルの割合。小さいほど検出しやすい）。縦は表示50%→実効40%
+  textItems:[],            // {x,y,w,h,str} ドキュメント座標（PDFテキスト層）
+  hasText:false,
+  data:[],                 // 抽出済みグリッド（プレビューの元データ）
+  busy:false,
+  ocrDone:false,
+  // --- ページ跨ぎ対応 ---
+  useCommon:false,         // 全ページ共通ガイド線を使うか
+  commonGuides:null,       // {v:[], h:[]} 共通ガイド線（ドキュメント座標）
+  combineMode:false,       // 全ページ連結プレビュー中か
+  combineStale:false,      // ガイド線変更などで連結結果が古くなったか
+  combinedData:null,       // 連結済みグリッド
+  combinedPageGrids:null,  // ページ別グリッドのキャッシュ（見出し除外の再組立用）
+};
+
+const RENDER_SCALE = 2;    // PDF/画像の内部描画倍率（OCR・検出の精度確保）
+
+/* ---------------- status ---------------- */
+function setStatus(msg, mode){
+  $('statusText').textContent = msg;
+  const dot = $('statusDot');
+  dot.className = 'dot' + (mode==='ok' ? ' ok' : mode==='busy' ? ' busy' : '');
+}
+function setProgress(label, ratio){
+  const wrap = $('progressWrap');
+  if(ratio === null){ wrap.classList.remove('show'); return; }
+  wrap.classList.add('show');
+  $('progressLabel').textContent = label;
+  $('progressBar').style.width = Math.round(ratio*100) + '%';
+}
+function refreshExcelButtons(){
+  const hasData = !!state.docW && Array.isArray(state.data) && state.data.length > 0 && !!state.data[0] && state.data[0].length > 0;
+  const canExport = hasData || (state.combineMode && !!state.docW && !!state.combinedData);
+  const title = canExport ? 'Excel（.xlsx）でダウンロード' : '先にファイルを読み込んでください';
+  for(const id of ['btnExcelTop','btnExcel']){
+    const b = $(id);
+    if(!b) continue;
+    b.disabled = !canExport;
+    b.title = title;
+  }
+}
+function updateStats(){
+  refreshExcelButtons();
+  const rows = state.hGuides.length + 1, cols = state.vGuides.length + 1;
+  $('guideStats').textContent = state.docW
+    ? `縦線 ${state.vGuides.length} 本 ／ 横線 ${state.hGuides.length} 本 → ${rows} 行 × ${cols} 列`
+    : '';
+  $('extractMode').textContent = state.docW
+    ? (state.hasText ? '抽出方式：PDFテキスト層（直接取得）' : '抽出方式：OCR（画像認識）')
+    : '';
+  $('ocrNote').textContent = (!state.hasText && state.docW)
+    ? 'このファイルにはテキスト情報がないため、OCRで読み取ります。' : '';
+  $('btnOcr').style.display = state.hasText ? 'none' : '';
+}
+
+/* ================================================================
+   ファイル読み込み
+   ================================================================ */
+$('btnOpen').addEventListener('click', ()=> $('fileInput').click());
+$('btnOpen2').addEventListener('click', ()=> $('fileInput').click());
+$('fileInput').addEventListener('change', e=>{
+  if(e.target.files[0]) loadFile(e.target.files[0]);
+  e.target.value = '';
+});
+const dz = $('dropzone');
+['dragenter','dragover'].forEach(ev=> document.addEventListener(ev, e=>{
+  e.preventDefault(); dz.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev=> document.addEventListener(ev, e=>{
+  e.preventDefault(); if(ev==='drop'||e.relatedTarget===null) dz.classList.remove('drag');
+}));
+document.addEventListener('drop', e=>{
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) loadFile(f);
+});
+
+async function loadFile(file){
+  const name = file.name || 'file';
+  const ext = (name.split('.').pop()||'').toLowerCase();
+  const isPdf = file.type === 'application/pdf' || ext === 'pdf';
+  const isImg = file.type.startsWith('image/') || ['png','jpg','jpeg','webp'].includes(ext);
+  if(!isPdf && !isImg){ setStatus('対応していない形式です。PDF または PNG/JPEG/WebP 画像を選んでください。'); showWorkspaceChrome(); return; }
+
+  state.fileName = name;
+  state.fileBase = name.replace(/\.[^.]+$/,'') || 'table';
+  state.pageNum = 1; state.pdfDoc = null;
+  state.vGuides = []; state.hGuides = []; state.data = []; state.ocrDone = false;
+  state.useCommon = false; state.commonGuides = null;
+  state.combineMode = false; state.combineStale = false;
+  state.combinedData = null; state.combinedPageGrids = null;
+  $('chkCommon').checked = false; $('chkCombine').checked = false;
+  $('pageBarNote').textContent = '';
+  $('pageBar').classList.add('hidden');
+  showWorkspaceChrome();
+  setStatus('読み込み中…','busy');
+
+  try{
+    if(isPdf) await loadPdf(file);
+    else await loadImage(file);
+  }catch(err){
+    console.error(err);
+    setStatus('読み込みに失敗しました：' + (err && err.message ? err.message : err));
+    return;
+  }
+  $('fileName').textContent = name;
+  $('fileMeta').textContent = state.kind === 'pdf' ? `PDF ／ ${state.pageCount} ページ` : '画像';
+  if(state.kind === 'image'){ // PDFは renderPdfPage 内で実施済み
+    fitZoom();
+    autoDetect(true);
+    updateStats();
+  }
+}
+
+/* ---------------- PDF ---------------- */
+async function loadPdf(file){
+  if(typeof pdfjsLib === 'undefined') throw new Error('pdf.js の読み込みに失敗しました（ネットワークを確認してください）');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf = await file.arrayBuffer();
+  state.pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+  state.pageCount = state.pdfDoc.numPages;
+  state.kind = 'pdf';
+  $('pager').classList.toggle('show', state.pageCount > 1);
+  $('pageBar').classList.toggle('hidden', state.pageCount <= 1);
+  await renderPdfPage(1);
+}
+
+/* テキスト層：アイテムの矩形をドキュメント座標へ変換（表示用・走査用で共用） */
+async function getTextItems(page, viewport){
+  const tc = await page.getTextContent();
+  const items = [];
+  for(const it of tc.items){
+    if(!it.str) continue;
+    const t = pdfjsLib.Util.transform(viewport.transform, it.transform);
+    const fontHeight = Math.hypot(t[2], t[3]) || Math.abs(it.height*RENDER_SCALE);
+    items.push({
+      str: it.str,
+      x: t[4],
+      y: t[5] - fontHeight,
+      w: (it.width||0) * RENDER_SCALE,
+      h: fontHeight,
+    });
+  }
+  return items;
+}
+
+async function renderPdfPage(num){
+  state.pageNum = num;
+  const page = await state.pdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale: RENDER_SCALE });
+  const canvas = $('docCanvas');
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently:true });
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  state.docW = canvas.width; state.docH = canvas.height;
+
+  state.textItems = await getTextItems(page, viewport);
+  state.hasText = state.textItems.length > 0;
+  $('pageLabel').textContent = `${num} / ${state.pageCount}`;
+  $('btnPrevPage').disabled = num <= 1;
+  $('btnNextPage').disabled = num >= state.pageCount;
+  state.data = []; state.ocrDone = false;
+  if(state.useCommon && state.commonGuides){
+    // 共通ガイド線モード：ページを切り替えてもガイド線はリセットしない
+    state.vGuides = [...state.commonGuides.v];
+    state.hGuides = [...state.commonGuides.h];
+    layoutStage(); drawAll();
+    fitZoom();
+    resetHistory(); updateStats();
+    if(state.hasText) extractFromText();
+    else buildEmptyGrid();
+    setStatus(`ページ ${num} を表示中。共通ガイド線（縦 ${state.vGuides.length} 本・横 ${state.hGuides.length} 本）を適用しています。`,'ok');
+  }else{
+    state.vGuides = []; state.hGuides = [];
+    layoutStage(); drawAll();
+    fitZoom(); autoDetect(true); updateStats();
+  }
+  if(state.combineMode && state.combinedData && !state.combineStale){
+    state.data = state.combinedData;
+    renderPreview();
+  }
+}
+$('btnPrevPage').addEventListener('click', ()=>{ if(state.pageNum>1) renderPdfPage(state.pageNum-1); });
+$('btnNextPage').addEventListener('click', ()=>{ if(state.pageNum<state.pageCount) renderPdfPage(state.pageNum+1); });
+
+/* ---------------- 画像 ---------------- */
+function loadImage(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      // 長辺を最大 2600px に収めて描画（OCR・検出に十分な解像度を確保）
+      const maxSide = 2600;
+      const s = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = $('docCanvas');
+      canvas.width = Math.round(img.naturalWidth * s);
+      canvas.height = Math.round(img.naturalHeight * s);
+      const ctx = canvas.getContext('2d', { willReadFrequently:true });
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      state.kind = 'image'; state.pageCount = 1;
+      state.docW = canvas.width; state.docH = canvas.height;
+      state.textItems = []; state.hasText = false;
+      $('pager').classList.remove('show');
+      layoutStage(); drawAll();
+      resolve();
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('画像を読み込めませんでした')); };
+    img.src = url;
+  });
+}
+
+function showWorkspaceChrome(){
+  $('emptyWrap').classList.add('hidden');
+  $('workspace').classList.remove('hidden');
+  $('statusbar').classList.remove('hidden');
+  $('fileChip').classList.add('show');
+  for(const id of ['sep1','sep2','sep3','docTools','guideTools','threshTools']) $(id).classList.remove('hidden');
+  refreshExcelButtons();
+}
+
+/* ================================================================
+   レイアウト（拡大率とルーラーの同期）
+   ================================================================ */
+function layoutStage(){
+  const z = state.zoom, W = Math.round(state.docW*z), H = Math.round(state.docH*z);
+  const doc = $('docCanvas'), ov = $('overlay');
+  doc.style.width = W+'px'; doc.style.height = H+'px';
+  ov.width = state.docW; ov.height = state.docH;
+  ov.style.width = W+'px'; ov.style.height = H+'px';
+  $('docWrap').style.width = W+'px'; $('docWrap').style.height = H+'px';
+  const dpr = window.devicePixelRatio || 1;
+  const rx = $('rulerX'); rx.width = W*dpr; rx.height = 30*dpr; rx.style.width = W+'px'; rx.style.height = '30px';
+  const ry = $('rulerY'); ry.height = H*dpr; ry.width = 30*dpr; ry.style.height = H+'px'; ry.style.width = '30px';
+  $('zoomLabel').textContent = Math.round(z*100)+'%';
+}
+function fitZoom(){
+  if(!state.docW) return;
+  const avail = $('scroll').clientWidth - 60;
+  state.zoom = clamp(avail / state.docW, 0.1, 2);
+  layoutStage(); drawAll();
+}
+$('btnZoomIn').addEventListener('click', ()=>{ state.zoom = clamp(state.zoom*1.2, .1, 4); layoutStage(); drawAll(); });
+$('btnZoomOut').addEventListener('click', ()=>{ state.zoom = clamp(state.zoom/1.2, .1, 4); layoutStage(); drawAll(); });
+$('btnFit').addEventListener('click', fitZoom);
+let resizeTimer = null;
+window.addEventListener('resize', ()=>{ clearTimeout(resizeTimer); resizeTimer = setTimeout(()=>{ /* 幅は維持（自動再フィットはしない） */ }, 200); });
+
+/* ================================================================
+   描画：ルーラー＋ガイド線オーバーレイ
+   ================================================================ */
+function drawAll(){ drawRulerX(); drawRulerY(); drawOverlay(); }
+
+function drawRulerX(){
+  const c = $('rulerX'), dpr = window.devicePixelRatio||1;
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  const w = c.width/dpr, h = 30, z = state.zoom;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = getVar('--ruler-bg'); ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = getVar('--ruler-tick'); ctx.fillStyle = getVar('--ruler-text');
+  ctx.font = '9px sans-serif'; ctx.lineWidth = 1; ctx.beginPath();
+  const stepDoc = niceStep(60/z);
+  for(let d=0; d<=state.docW; d+=stepDoc){
+    const x = Math.round(d*z)+.5;
+    ctx.moveTo(x, h-8); ctx.lineTo(x, h);
+    ctx.fillText(String(Math.round(d/RENDER_SCALE)), x+2, 10);
+    for(let k=1;k<5;k++){ const sx = Math.round((d+stepDoc*k/5)*z)+.5; if(sx<=w){ ctx.moveTo(sx,h-4); ctx.lineTo(sx,h);} }
+  }
+  ctx.stroke();
+  // ガイドのタグマーク（クリックで削除できる目印）
+  for(const g of state.vGuides){
+    const x = g*z;
+    ctx.fillStyle = getVar('--red');
+    ctx.beginPath(); ctx.moveTo(x-5,h); ctx.lineTo(x+5,h); ctx.lineTo(x,h-10); ctx.closePath(); ctx.fill();
+    ctx.fillRect(x-5, 0, 10, 3);
+  }
+}
+function drawRulerY(){
+  const c = $('rulerY'), dpr = window.devicePixelRatio||1;
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  const w = 30, h = c.height/dpr, z = state.zoom;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = getVar('--ruler-bg'); ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = getVar('--ruler-tick'); ctx.fillStyle = getVar('--ruler-text');
+  ctx.font = '9px sans-serif'; ctx.lineWidth = 1; ctx.beginPath();
+  const stepDoc = niceStep(60/z);
+  for(let d=0; d<=state.docH; d+=stepDoc){
+    const y = Math.round(d*z)+.5;
+    ctx.moveTo(w-8, y); ctx.lineTo(w, y);
+    ctx.save(); ctx.translate(9, y+2); ctx.rotate(-Math.PI/2); ctx.textAlign = 'right';
+    ctx.fillText(String(Math.round(d/RENDER_SCALE)), 0, 0); ctx.restore();
+    for(let k=1;k<5;k++){ const sy = Math.round((d+stepDoc*k/5)*z)+.5; if(sy<=h){ ctx.moveTo(w-4,sy); ctx.lineTo(w,sy);} }
+  }
+  ctx.stroke();
+  for(const g of state.hGuides){
+    const y = g*z;
+    ctx.fillStyle = getVar('--blue');
+    ctx.beginPath(); ctx.moveTo(w,y-5); ctx.lineTo(w,y+5); ctx.lineTo(w-10,y); ctx.closePath(); ctx.fill();
+    ctx.fillRect(0, y-5, 3, 10);
+  }
+}
+function niceStep(minDoc){
+  const steps = [10,20,25,50,100,200,250,500,1000];
+  for(const s of steps) if(s*RENDER_SCALE >= minDoc) return s*RENDER_SCALE;
+  return 1000*RENDER_SCALE;
+}
+function getVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
+}
+
+function drawOverlay(){
+  const ov = $('overlay'), ctx = ov.getContext('2d');
+  ctx.clearRect(0,0,ov.width,ov.height);
+  ctx.lineWidth = Math.max(1, 1.4/state.zoom * 1.5);
+  ctx.setLineDash([7,5]);
+  ctx.strokeStyle = getVar('--red');
+  ctx.beginPath();
+  for(const x of state.vGuides){ ctx.moveTo(Math.round(x)+.5, 0); ctx.lineTo(Math.round(x)+.5, state.docH); }
+  ctx.stroke();
+  ctx.strokeStyle = getVar('--blue');
+  ctx.beginPath();
+  for(const y of state.hGuides){ ctx.moveTo(0, Math.round(y)+.5); ctx.lineTo(state.docW, Math.round(y)+.5); }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/* ================================================================
+   ガイド線の自動検出
+   1) 描画ピクセルの射影（濃いピクセルが連続する列/行＝罫線）
+   2) PDFテキスト層がある場合は文字の並びからも補完
+   ================================================================ */
+function autoDetect(fromLoad){
+  if(!state.docW) return;
+  setStatus('表の罫線を検出中…','busy');
+  requestAnimationFrame(()=>{
+    const found = detectFromPixels();
+    let v = found.v, h = found.h;
+    if(state.hasText){
+      const t = detectFromText();
+      if(v.length < 2) v = t.v;
+      if(h.length < 2) h = t.h;
+    }
+    state.vGuides = v; state.hGuides = h;
+    state.ocrDone = false;
+    drawAll(); updateStats();
+    if(fromLoad) resetHistory(); else commitHistory();
+    if(state.hasText){ extractFromText(); setStatus(`自動検出しました（縦線 ${v.length} 本・横線 ${h.length} 本）。テキスト層から抽出済みです。`,'ok'); }
+    else if(v.length || h.length){ setStatus(`自動検出しました（縦線 ${v.length} 本・横線 ${h.length} 本）。「OCRで読み取る」で文字を抽出できます。`,'ok'); }
+    else setStatus('罫線を自動検出できませんでした。上の定規・左の定規をクリックしてガイド線を引いてください。');
+    if(!fromLoad){ /* 手動再検出 */ }
+  });
+}
+$('btnAuto').addEventListener('click', ()=> autoDetect(false));
+
+/* 閾値スライダー：数値表示を即時更新し、離した時点で現在のページを再検出
+   縦線は表示値と実効閾値を分離する（実効閾値 = 表示値 × 0.8）。
+   例：表示50% = 実効40%、表示100% = 実効80%、表示25% = 実効20%。
+   横線は従来どおり表示値 = 実効閾値。 */
+function bindThreshH(){
+  const rng = $('rngH');
+  rng.addEventListener('input', ()=>{
+    state.threshH = +rng.value;
+    $('valH').textContent = rng.value + '%';
+  });
+  rng.addEventListener('change', ()=>{ if(state.docW) autoDetect(false); });
+}
+function bindThreshV(){
+  const rng = $('rngV');
+  const sync = ()=>{
+    const disp = +rng.value;
+    state.threshVDisplay = disp;
+    state.threshV = disp * 0.8;
+    $('valV').textContent = disp + '%';
+  };
+  sync();
+  rng.addEventListener('input', sync);
+  rng.addEventListener('change', ()=>{ if(state.docW) autoDetect(false); });
+}
+bindThreshV();
+bindThreshH();
+
+function detectFromPixels(){ return detectFromPixelsFor($('docCanvas')); }
+function detectFromPixelsFor(canvas){
+  const ctx = canvas.getContext('2d', { willReadFrequently:true });
+  const W = canvas.width, H = canvas.height;
+  const img = ctx.getImageData(0,0,W,H).data;
+  const isDark = i => (0.299*img[i] + 0.587*img[i+1] + 0.114*img[i+2]) < 130;
+  // 縦線：すべての列を走査する（列を間引くと細い縦線を取りこぼすため）。
+  // 各列について、サンプリングした行のうち暗いピクセルの割合が閾値以上の列を線とする。
+  const stepY = Math.max(1, Math.round(H/1400));
+  const sampledRows = Math.ceil(H/stepY);
+  const colHit = new Float32Array(W);
+  for(let x=0; x<W; x++){
+    let n = 0;
+    for(let y=0; y<H; y+=stepY){ if(isDark((y*W + x)*4)) n++; }
+    colHit[x] = n;
+  }
+  // 横線：すべての行を走査する。
+  const stepX = Math.max(1, Math.round(W/1400));
+  const sampledCols = Math.ceil(W/stepX);
+  const rowHit = new Float32Array(H);
+  for(let y=0; y<H; y++){
+    let n = 0;
+    for(let x=0; x<W; x+=stepX){ if(isDark((y*W + x)*4)) n++; }
+    rowHit[y] = n;
+  }
+  // 閾値は縦・横で独立（スライダーで調整可能。小さいほど検出しやすい）
+  const v = pickLines(colHit, sampledRows * state.threshV/100, W);
+  const h = pickLines(rowHit, sampledCols * state.threshH/100, H);
+  return { v, h };
+}
+function pickLines(hist, threshold, limit){
+  const raw = [];
+  let run = -1;
+  for(let i=0;i<hist.length;i++){
+    if(hist[i] >= threshold){ if(run<0) run = i; }
+    else if(run>=0){ raw.push((run + i - 1)/2); run = -1; }
+  }
+  if(run>=0) raw.push((run + hist.length - 1)/2);
+  // 端に近すぎる線と近接線を除去
+  const out = [];
+  for(const p of raw){
+    if(p < 6 || p > limit-6) continue;
+    if(out.length && p - out[out.length-1] < 8) continue;
+    out.push(Math.round(p));
+  }
+  return out.slice(0, 80);
+}
+function detectFromText(){ return detectFromTextFor(state.textItems); }
+function detectFromTextFor(items){
+  // 行：アイテムの中心Yをクラスタリングし、行間の中央に横線
+  const ys = items.map(it=> it.y + it.h/2).sort((a,b)=>a-b);
+  const rows = [];
+  for(const y of ys){ if(!rows.length || y - rows[rows.length-1] > 6) rows.push(y); }
+  const h = [];
+  for(let i=0;i<rows.length-1;i++) h.push(Math.round((rows[i]+rows[i+1])/2));
+  // 列：アイテム左端のクラスタから、列の切れ目（大きな空白）の中央に縦線
+  const spans = items.map(it=>[it.x, it.x+it.w]).sort((a,b)=>a[0]-b[0]);
+  const v = [];
+  let curEnd = spans.length ? spans[0][1] : 0;
+  for(let i=1;i<spans.length;i++){
+    if(spans[i][0] - curEnd > 26*RENDER_SCALE/2 && curEnd > 0){
+      v.push(Math.round((curEnd + spans[i][0])/2));
+    }
+    curEnd = Math.max(curEnd, spans[i][1]);
+  }
+  return { v: [...new Set(v)], h };
+}
+
+/* ================================================================
+   ルーラー操作：追加 / 個別削除 / ドラッグ移動
+   （線の追加はルーラーのクリック限定。メインキャンバスでは追加しない）
+   ================================================================ */
+const HIT = 7; // 表示pxでのヒット許容
+function nearestGuide(list, posDoc){
+  let best = -1, bestD = Infinity;
+  list.forEach((g,i)=>{ const d = Math.abs(g - posDoc); if(d < bestD){ bestD = d; best = i; } });
+  return bestD <= HIT/state.zoom ? best : -1;
+}
+function sortGuides(){
+  state.vGuides.sort((a,b)=>a-b); state.hGuides.sort((a,b)=>a-b);
+  state.vGuides = [...new Set(state.vGuides.map(Math.round))];
+  state.hGuides = [...new Set(state.hGuides.map(Math.round))];
+}
+function guidesChanged(){
+  sortGuides(); drawAll(); updateStats();
+  if(state.hasText) extractFromTextDebounced();
+  else buildEmptyGrid();
+}
+
+/* ================================================================
+   ガイド線の履歴（Undo / Redo）
+   対象：線の追加・ドラッグ移動・1本削除・一括削除・自動検出。
+   スナップショットはガイド線の配列のみ（プレビューの編集内容は対象外）。
+   ================================================================ */
+const history = { stack: [], idx: -1 };
+function snapshotGuides(){ return { v:[...state.vGuides], h:[...state.hGuides] }; }
+function sameGuides(a, b){
+  return a.v.length === b.v.length && a.h.length === b.h.length
+    && a.v.every((x,i)=> x === b.v[i]) && a.h.every((y,i)=> y === b.h[i]);
+}
+function updateUndoButtons(){
+  $('btnUndo').disabled = history.idx <= 0;
+  $('btnRedo').disabled = history.idx >= history.stack.length - 1;
+}
+function resetHistory(){ // ファイル読み込み・ページ切替時：現在状態を起点にする
+  history.stack = [snapshotGuides()];
+  history.idx = 0;
+  updateUndoButtons();
+}
+function commitHistory(){ // 1操作の完了時に呼ぶ（変化が無ければ積まない）
+  const snap = snapshotGuides();
+  const cur = history.stack[history.idx];
+  if(cur && sameGuides(cur, snap)) return;
+  history.stack = history.stack.slice(0, history.idx + 1);
+  history.stack.push(snap);
+  if(history.stack.length > 100) history.stack.shift();
+  history.idx = history.stack.length - 1;
+  updateUndoButtons();
+  syncCommonFromCurrent();
+  markCombineStale();
+}
+/* 共通ガイド線モード中は、手調整・Undo/Redoの結果を共通線にも反映する */
+function syncCommonFromCurrent(){
+  if(state.useCommon) state.commonGuides = snapshotGuides();
+}
+/* ガイド線が変わったら連結結果は古くなる（Excel書き出し時に再構築する） */
+function markCombineStale(){
+  if(state.combineMode && !state.combineStale){
+    state.combineStale = true;
+    $('pageBarNote').textContent = 'ガイド線が変更されました。Excel書き出し時に連結し直します。';
+  }
+}
+function applySnapshot(snap){
+  state.vGuides = [...snap.v]; state.hGuides = [...snap.h];
+  state.ocrDone = false;
+  sortGuides(); drawAll(); updateStats();
+  syncCommonFromCurrent();
+  markCombineStale();
+  if(state.hasText) extractFromTextDebounced();
+  else buildEmptyGrid();
+}
+function undoGuides(){
+  if(history.idx <= 0) return;
+  history.idx--;
+  applySnapshot(history.stack[history.idx]);
+  updateUndoButtons();
+  setStatus('ガイド線の操作を戻しました。');
+}
+function redoGuides(){
+  if(history.idx >= history.stack.length - 1) return;
+  history.idx++;
+  applySnapshot(history.stack[history.idx]);
+  updateUndoButtons();
+  setStatus('ガイド線の操作をやり直しました。');
+}
+$('btnUndo').addEventListener('click', undoGuides);
+$('btnRedo').addEventListener('click', redoGuides);
+document.addEventListener('keydown', e=>{
+  if(!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if(key !== 'z' && key !== 'y') return;
+  // プレビューのセル編集中・入力欄にフォーカスがあるときは、テキスト編集側の
+  // 通常の Undo/Redo を優先し、ガイド線の履歴とは競合させない
+  const t = e.target;
+  if(t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+  if(!state.docW) return;
+  e.preventDefault();
+  if(key === 'y' || (key === 'z' && e.shiftKey)) redoGuides();
+  else undoGuides();
+});
+
+function rulerPointer(canvas, axis){
+  // axis: 'v' 上ルーラー（縦線を操作） / 'h' 左ルーラー（横線を操作）
+  // 挙動：空き位置で pointerdown → その位置に線を追加（そのままドラッグで微調整可）
+  //       既存線のタグ付近でクリック（動かさずに離す） → その1本だけ削除
+  //       既存線をドラッグ → 移動
+  let dragIdx = -1, downPos = 0, moved = false, wasExisting = false, addedNew = false;
+  const listOf = ()=> axis==='v' ? state.vGuides : state.hGuides;
+  const limitOf = ()=> axis==='v' ? state.docW : state.docH;
+  const dispOf = e=>{
+    const rect = canvas.getBoundingClientRect();
+    return axis==='v' ? (e.clientX - rect.left) : (e.clientY - rect.top);
+  };
+  canvas.addEventListener('pointerdown', e=>{
+    if(!state.docW) return;
+    const disp = dispOf(e);
+    const doc = clamp(disp / state.zoom, 0, limitOf());
+    const list = listOf();
+    const idx = nearestGuide(list, doc);
+    canvas.setPointerCapture(e.pointerId);
+    downPos = disp; moved = false; addedNew = false;
+    if(idx >= 0){ dragIdx = idx; wasExisting = true; }
+    else{
+      list.push(Math.round(doc));
+      sortGuides();
+      dragIdx = list.indexOf(Math.round(doc));
+      wasExisting = false;
+      addedNew = true; // 履歴への記録は pointerup でまとめて行う
+      guidesChanged();
+    }
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(dragIdx < 0) return;
+    const disp = dispOf(e);
+    if(Math.abs(disp - downPos) > 3) moved = true;
+    if(!moved) return;
+    const list = listOf();
+    const val = Math.round(clamp(disp / state.zoom, 0, limitOf()));
+    list[dragIdx] = val;
+    list.sort((a,b)=>a-b);
+    dragIdx = list.indexOf(val);
+    drawAll();
+  });
+  canvas.addEventListener('pointerup', ()=>{
+    if(dragIdx < 0) return;
+    const list = listOf();
+    if(!moved && wasExisting){
+      list.splice(dragIdx, 1);
+      guidesChanged();
+      commitHistory();
+      setStatus('ガイド線を1本削除しました。');
+    } else if(moved || addedNew){
+      guidesChanged();
+      commitHistory();
+    }
+    dragIdx = -1; wasExisting = false; addedNew = false;
+  });
+  canvas.addEventListener('pointercancel', ()=>{ dragIdx = -1; wasExisting = false; addedNew = false; });
+}
+rulerPointer($('rulerX'), 'v');
+rulerPointer($('rulerY'), 'h');
+
+/* オーバーレイ上ではドラッグ移動のみ（追加はしない） */
+(function(){
+  const ov = $('overlay');
+  let drag = null; // {axis, idx}
+  let dragMoved = false;
+  function pos(e){
+    const r = ov.getBoundingClientRect();
+    return { x:(e.clientX-r.left)/state.zoom, y:(e.clientY-r.top)/state.zoom };
+  }
+  ov.addEventListener('pointerdown', e=>{
+    if(!state.docW) return;
+    const p = pos(e);
+    const vi = nearestGuide(state.vGuides, p.x);
+    const hi = nearestGuide(state.hGuides, p.y);
+    if(vi>=0 && (hi<0 || Math.abs(state.vGuides[vi]-p.x) <= Math.abs(state.hGuides[hi]-p.y))){ drag = {axis:'v', idx:vi}; }
+    else if(hi>=0){ drag = {axis:'h', idx:hi}; }
+    if(drag) ov.setPointerCapture(e.pointerId);
+  });
+  ov.addEventListener('pointermove', e=>{
+    const p = pos(e);
+    if(!drag){
+      const vi = nearestGuide(state.vGuides, p.x), hi = nearestGuide(state.hGuides, p.y);
+      ov.style.cursor = vi>=0 ? 'ew-resize' : hi>=0 ? 'ns-resize' : 'default';
+      return;
+    }
+    const before = drag.axis==='v' ? state.vGuides[drag.idx] : state.hGuides[drag.idx];
+    if(drag.axis==='v') state.vGuides[drag.idx] = Math.round(clamp(p.x,0,state.docW));
+    else state.hGuides[drag.idx] = Math.round(clamp(p.y,0,state.docH));
+    const after = drag.axis==='v' ? state.vGuides[drag.idx] : state.hGuides[drag.idx];
+    if(after !== before) dragMoved = true;
+    drawAll();
+  });
+  ov.addEventListener('pointerup', ()=>{
+    if(!drag) return;
+    drag = null;
+    guidesChanged();
+    if(dragMoved){ commitHistory(); dragMoved = false; }
+  });
+})();
+
+$('btnClear').addEventListener('click', ()=>{
+  if(!state.vGuides.length && !state.hGuides.length) return;
+  state.vGuides = []; state.hGuides = []; state.ocrDone = false;
+  guidesChanged();
+  commitHistory();
+  setStatus('すべてのガイド線を削除しました。（「戻る」で復元できます）');
+});
+
+/* ================================================================
+   セル境界と抽出
+   ================================================================ */
+function boundaries(){
+  const xs = [0, ...state.vGuides, state.docW];
+  const ys = [0, ...state.hGuides, state.docH];
+  return { xs, ys, cols: xs.length-1, rows: ys.length-1 };
+}
+function boundariesFor(docW, docH, v, h){
+  const xs = [0, ...v, docW];
+  const ys = [0, ...h, docH];
+  return { xs, ys, cols: xs.length-1, rows: ys.length-1 };
+}
+
+/* ================================================================
+   ページ跨ぎ対応
+   (1) 共通ガイド線：全ページを走査し、過半数のページに現れる位置を採用
+   (2) 現在ページのガイド線を全ページへ適用
+   (3) 全ページ連結プレビュー（見出し重複行の除外オプション付き）
+   ================================================================ */
+/* 任意ページを画面外キャンバスへ描画し、テキスト層も取得する */
+async function renderPageOffscreen(num){
+  const page = await state.pdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale: RENDER_SCALE });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently:true });
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const items = await getTextItems(page, viewport);
+  return { canvas, items, docW: canvas.width, docH: canvas.height };
+}
+/* 1ページ分の検出（ピクセル射影＋テキスト層補完。autoDetect と同じ判定・現在の閾値を使用） */
+function guidesForScan(canvas, items){
+  const found = detectFromPixelsFor(canvas);
+  let v = found.v, h = found.h;
+  if(items.length){
+    const t = detectFromTextFor(items);
+    if(v.length < 2) v = t.v;
+    if(h.length < 2) h = t.h;
+  }
+  return { v, h };
+}
+/* ページごとの線位置リストをクラスタリングし、過半数のページに現れる位置の中央値を返す */
+function clusterCommon(lists){
+  const total = lists.length;
+  const all = [];
+  lists.forEach((list, pi)=> list.forEach(p=> all.push({ p, pi })));
+  all.sort((a,b)=> a.p - b.p);
+  const clusters = [];
+  for(const e of all){
+    const last = clusters[clusters.length-1];
+    if(last && e.p - last.max <= 12){ last.items.push(e); last.max = e.p; }
+    else clusters.push({ items:[e], max:e.p });
+  }
+  const out = [];
+  for(const cl of clusters){
+    const pages = new Set(cl.items.map(e=> e.pi));
+    if(pages.size > total/2){
+      const ps = cl.items.map(e=> e.p).sort((a,b)=> a-b);
+      const med = ps.length % 2 ? ps[(ps.length-1)/2] : Math.round((ps[ps.length/2-1] + ps[ps.length/2]) / 2);
+      const pos = Math.round(med);
+      if(!out.length || pos - out[out.length-1] >= 8) out.push(pos);
+    }
+  }
+  return out.slice(0, 80);
+}
+async function computeCommonGuides(){
+  const total = state.pageCount;
+  const vLists = [], hLists = [];
+  for(let n=1; n<=total; n++){
+    setProgress(`全ページ走査中 ${n} / ${total} ページ`, n/total);
+    let g;
+    if(n === state.pageNum) g = guidesForScan($('docCanvas'), state.textItems);
+    else { const r = await renderPageOffscreen(n); g = guidesForScan(r.canvas, r.items); }
+    vLists.push(g.v); hLists.push(g.h);
+  }
+  setProgress('', null);
+  return { v: clusterCommon(vLists), h: clusterCommon(hLists) };
+}
+
+$('chkCommon').addEventListener('change', async e=>{
+  if(state.kind !== 'pdf' || state.pageCount <= 1){ e.target.checked = false; return; }
+  if(!e.target.checked){
+    state.useCommon = false;
+    $('pageBarNote').textContent = '';
+    setStatus('共通ガイド線をOFFにしました。このページは現在の線のまま、次ページからはページごとに自動検出します。');
+    return;
+  }
+  setStatus('全ページを走査して共通ガイド線を求めています…','busy');
+  try{
+    const common = await computeCommonGuides();
+    state.commonGuides = common;
+    state.useCommon = true;
+    state.vGuides = [...common.v]; state.hGuides = [...common.h];
+    state.ocrDone = false;
+    sortGuides(); drawAll(); updateStats(); resetHistory();
+    markCombineStale();
+    if(state.hasText) extractFromText(); else buildEmptyGrid();
+    $('pageBarNote').textContent = '共通ガイド線を使用中です（ページを切り替えても保持されます）。';
+    setStatus(`共通ガイド線を採用しました（縦 ${common.v.length} 本・横 ${common.h.length} 本）。過半数のページに現れる位置を中央値で採用しています。`,'ok');
+  }catch(err){
+    console.error(err);
+    state.useCommon = false; e.target.checked = false;
+    setStatus('共通ガイド線の作成に失敗しました：' + (err && err.message ? err.message : err));
+  }finally{ setProgress('', null); }
+});
+
+$('btnApplyGuides').addEventListener('click', ()=>{
+  if(state.kind !== 'pdf' || state.pageCount <= 1 || !state.docW) return;
+  state.commonGuides = snapshotGuides();
+  state.useCommon = true;
+  $('chkCommon').checked = true;
+  markCombineStale();
+  $('pageBarNote').textContent = 'このページのガイド線を全ページ共通として使用中です。';
+  setStatus(`現在のページのガイド線（縦 ${state.vGuides.length} 本・横 ${state.hGuides.length} 本）を全ページに適用しました。ページを切り替えても線は保持されます。`,'ok');
+});
+
+/* --- 全ページ連結 --- */
+async function buildCombinedPageGrids(){
+  const grids = [];
+  const total = state.pageCount;
+  for(let n=1; n<=total; n++){
+    setProgress(`連結用に抽出中 ${n} / ${total} ページ`, n/total);
+    if(n === state.pageNum){
+      const { xs, ys } = boundaries();
+      if(state.hasText) grids.push(gridFromText(state.textItems, xs, ys));
+      else grids.push(await ocrGridFor($('docCanvas'), xs, ys, `OCR実行中（${n}ページ目）`));
+      continue;
+    }
+    const r = await renderPageOffscreen(n);
+    let v, h;
+    if(state.useCommon && state.commonGuides){ v = state.commonGuides.v; h = state.commonGuides.h; }
+    else { const g = guidesForScan(r.canvas, r.items); v = g.v; h = g.h; }
+    const b = boundariesFor(r.docW, r.docH, v.filter(x=> x < r.docW), h.filter(y=> y < r.docH));
+    if(r.items.length) grids.push(gridFromText(r.items, b.xs, b.ys));
+    else grids.push(await ocrGridFor(r.canvas, b.xs, b.ys, `OCR実行中（${n}ページ目）`));
+  }
+  setProgress('', null);
+  return grids;
+}
+function rowKey(row){ return row.map(c=> String(c ?? '').trim()).join('\u0001'); }
+function assembleCombined(grids){
+  if(!grids.length) return [];
+  const out = grids[0].map(r=> [...r]);
+  const cols = out.length ? out[0].length : 0;
+  const header = grids[0].length ? rowKey(grids[0][0]) : '';
+  const headerEmpty = !header.replace(/\u0001/g, '');
+  for(let i=1; i<grids.length; i++){
+    let rows = grids[i];
+    if($('chkDedupe').checked && !headerEmpty && rows.length && rowKey(rows[0]) === header) rows = rows.slice(1);
+    for(const r of rows){
+      const rr = [...r];
+      if(cols){ while(rr.length < cols) rr.push(''); out.push(rr.slice(0, cols)); }
+      else out.push(rr);
+    }
+  }
+  return out;
+}
+async function rebuildCombined(){
+  state.combinedPageGrids = await buildCombinedPageGrids();
+  state.combinedData = assembleCombined(state.combinedPageGrids);
+  state.combineStale = false;
+  state.data = state.combinedData;
+  renderPreview();
+  $('pageBarNote').textContent = '全ページ連結プレビュー中です（Excelはファイル名に _all を付けて1シートで書き出します）。';
+}
+$('chkCombine').addEventListener('change', async e=>{
+  if(state.kind !== 'pdf' || state.pageCount <= 1){ e.target.checked = false; return; }
+  if(!e.target.checked){
+    state.combineMode = false; state.combinedData = null; state.combinedPageGrids = null; state.combineStale = false;
+    $('pageBarNote').textContent = state.useCommon ? '共通ガイド線を使用中です。' : '';
+    if(state.hasText) extractFromText(); else buildEmptyGrid();
+    setStatus('連結プレビューをOFFにしました（ページ単位の表示に戻りました）。');
+    return;
+  }
+  if(ocrRunning){ e.target.checked = false; setStatus('OCR実行中は連結できません。完了後に再度ONにしてください。'); return; }
+  if(typeof Tesseract === 'undefined' && !state.hasText){ /* OCRが必要なページで失敗する場合は rebuild 内のエラーで通知 */ }
+  state.combineMode = true;
+  setStatus('全ページを抽出して連結しています…','busy');
+  try{
+    await rebuildCombined();
+    setStatus(`全ページ（${state.pageCount} ページ）を連結しました。合計 ${state.combinedData.length} 行です。`,'ok');
+  }catch(err){
+    console.error(err);
+    state.combineMode = false; state.combinedData = null; state.combinedPageGrids = null;
+    e.target.checked = false;
+    setStatus('連結に失敗しました：' + (err && err.message ? err.message : err));
+  }finally{ setProgress('', null); }
+});
+$('chkDedupe').addEventListener('change', ()=>{
+  if(state.combineMode && state.combinedPageGrids){
+    state.combinedData = assembleCombined(state.combinedPageGrids);
+    state.data = state.combinedData;
+    renderPreview();
+    setStatus($('chkDedupe').checked ? '見出し重複行を除外して連結し直しました。' : '見出し重複行を含めて連結し直しました。');
+  }
+});
+
+/* --- PDFテキスト層から直接抽出 --- */
+let extractTimer = null;
+function extractFromTextDebounced(){ clearTimeout(extractTimer); extractTimer = setTimeout(extractFromText, 120); }
+function extractFromText(){
+  if(!state.hasText) return;
+  const { xs, ys } = boundaries();
+  const grid = gridFromText(state.textItems, xs, ys);
+  if(state.combineMode && state.combinedData && !state.combineStale){
+    state.data = state.combinedData; // 連結プレビュー表示中はそちらを維持
+    renderPreview();
+    return;
+  }
+  state.data = grid;
+  renderPreview();
+}
+/* テキストアイテム群と境界からグリッドを組み立てる（現在ページ・全ページ走査で共用） */
+function gridFromText(items, xs, ys){
+  const cols = xs.length - 1, rows = ys.length - 1;
+  const grid = Array.from({length:rows}, ()=> Array(cols).fill(''));
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const cellItems = items.filter(it=>{
+      const cx = it.x + it.w/2, cy = it.y + it.h/2;
+      return cx >= xs[c] && cx < xs[c+1] && cy >= ys[r] && cy < ys[r+1];
+    });
+    if(!cellItems.length) continue;
+    // 行（ベースライン）ごとにまとめる
+    cellItems.sort((a,b)=> (a.y-b.y) || (a.x-b.x));
+    const lines = [];
+    for(const it of cellItems){
+      const line = lines[lines.length-1];
+      if(line && Math.abs(it.y - line.y) <= Math.max(4, it.h*0.6)) line.items.push(it);
+      else lines.push({ y: it.y, items:[it] });
+    }
+    grid[r][c] = lines.map(l=> l.items.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ')).join('\n');
+  }
+  return grid;
+}
+
+/* --- ガイドだけ先に反映（OCR前／画像用） --- */
+function buildEmptyGrid(){
+  if(state.hasText) return;
+  const { cols, rows } = boundaries();
+  const prev = state.data;
+  const grid = Array.from({length:rows}, (_,r)=> Array.from({length:cols}, (_,c)=>
+    (prev && prev[r] && typeof prev[r][c] === 'string') ? prev[r][c] : ''));
+  // OCR済み後にガイドを動かした場合は内容がずれるため、未OCR時のみ保持
+  state.data = state.ocrDone ? Array.from({length:rows}, ()=> Array(cols).fill('')) : grid;
+  if(state.ocrDone) state.ocrDone = false;
+  if(state.combineMode && state.combinedData && !state.combineStale){
+    state.data = state.combinedData; // 連結プレビュー表示中はそちらを維持
+  }
+  renderPreview();
+}
+
+/* --- OCR（セル範囲だけを切り出して認識） --- */
+let ocrWorker = null, ocrRunning = false;
+async function ensureOcrWorker(){
+  if(!ocrWorker){
+    ocrWorker = await Tesseract.createWorker(['jpn','eng'], 1, {
+      logger: m=>{ if(m.status === 'loading language traineddata' || m.status === 'initializing api') setProgress('OCR準備中：' + m.status, m.progress||0); }
+    });
+  }
+  return ocrWorker;
+}
+/* 指定キャンバスを境界で区切り、セルごとにOCRしてグリッドを返す（現在ページ・全ページ連結で共用） */
+async function ocrGridFor(src, xs, ys, label){
+  const worker = await ensureOcrWorker();
+  const cols = xs.length - 1, rows = ys.length - 1;
+  const cellCanvas = document.createElement('canvas');
+  const cctx = cellCanvas.getContext('2d');
+  const total = rows*cols; let done = 0;
+  const grid = Array.from({length:rows}, ()=> Array(cols).fill(''));
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x0 = xs[c], x1 = xs[c+1], y0 = ys[r], y1 = ys[r+1];
+      const w = Math.max(1, x1-x0), h = Math.max(1, y1-y0);
+      const upscale = clamp(900 / w, 1, 3); // 小さいセルは拡大して認識率を上げる
+      cellCanvas.width = Math.round(w*upscale); cellCanvas.height = Math.round(h*upscale);
+      cctx.fillStyle = '#ffffff'; cctx.fillRect(0,0,cellCanvas.width,cellCanvas.height);
+      cctx.drawImage(src, x0, y0, w, h, 0, 0, cellCanvas.width, cellCanvas.height);
+      const { data } = await worker.recognize(cellCanvas);
+      grid[r][c] = (data.text||'').replace(/\s+\n/g,'\n').trim();
+      done++;
+      setProgress(`${label} ${done} / ${total} セル`, done/total);
+    }
+  }
+  return grid;
+}
+$('btnOcr').addEventListener('click', async ()=>{
+  if(ocrRunning || !state.docW) return;
+  if(state.combineMode){ setStatus('全ページ連結プレビュー中は、ページ単位のOCRはできません。連結プレビューをOFFにしてから実行してください。'); return; }
+  if(typeof Tesseract === 'undefined'){ setStatus('Tesseract.js の読み込みに失敗しました（ネットワークを確認してください）'); return; }
+  ocrRunning = true; state.busy = true;
+  $('btnOcr').disabled = true;
+  setStatus('OCRエンジンを準備中…（初回は言語データの取得に時間がかかります）','busy');
+  try{
+    const { xs, ys } = boundaries();
+    const total = (ys.length-1) * (xs.length-1);
+    const grid = await ocrGridFor($('docCanvas'), xs, ys, 'OCR実行中');
+    state.data = grid; state.ocrDone = true;
+    renderPreview();
+    setStatus(`OCRが完了しました（${total} セル）。プレビューで内容を確認・修正してください。`,'ok');
+  }catch(err){
+    console.error(err);
+    setStatus('OCRに失敗しました：' + (err && err.message ? err.message : err));
+  }finally{
+    setProgress('', null);
+    ocrRunning = false; state.busy = false;
+    $('btnOcr').disabled = false;
+  }
+});
+
+/* ================================================================
+   プレビュー（contenteditable で直接編集）
+   ================================================================ */
+function renderPreview(){
+  const host = $('tableHost');
+  const data = state.data;
+  if(!state.docW || !data.length || !data[0].length){
+    $('previewEmpty').classList.remove('hidden'); host.innerHTML=''; refreshExcelButtons(); return;
+  }
+  refreshExcelButtons();
+  $('previewEmpty').classList.add('hidden');
+  const table = document.createElement('table');
+  table.className = 'grid'; table.id = 'gridTable';
+  data.forEach((row, r)=>{
+    const tr = document.createElement('tr');
+    row.forEach((val, c)=>{
+      const td = document.createElement('td');
+      td.contentEditable = 'true';
+      td.spellcheck = false;
+      td.textContent = val;
+      td.dataset.r = r; td.dataset.c = c;
+      td.addEventListener('input', ()=>{ state.data[r][c] = td.innerText.replace(/\n+$/,''); });
+      td.addEventListener('keydown', e=>{ if(e.key === 'Enter' && !e.shiftKey){ /* 改行は許可（Excelではセル内改行） */ } });
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+  host.innerHTML = ''; host.appendChild(table);
+}
+function syncDataFromDom(){
+  const table = $('gridTable');
+  if(!table) return state.data;
+  const data = [];
+  table.querySelectorAll('tr').forEach(tr=>{
+    const row = [];
+    tr.querySelectorAll('td').forEach(td=> row.push(td.innerText.replace(/\u00a0/g,' ').replace(/\n+$/,'')));
+    data.push(row);
+  });
+  state.data = data;
+  return data;
+}
+$('btnAddRow').addEventListener('click', ()=>{
+  const data = syncDataFromDom(); if(!data.length) return;
+  data.push(Array(data[0].length).fill('')); state.data = data; renderPreview();
+});
+$('btnAddCol').addEventListener('click', ()=>{
+  const data = syncDataFromDom(); if(!data.length) return;
+  data.forEach(row=> row.push('')); state.data = data; renderPreview();
+});
+$('btnDelRow').addEventListener('click', ()=>{
+  const data = syncDataFromDom(); if(data.length <= 1) return;
+  data.pop(); state.data = data; renderPreview();
+});
+$('btnDelCol').addEventListener('click', ()=>{
+  const data = syncDataFromDom(); if(!data.length || data[0].length <= 1) return;
+  data.forEach(row=> row.pop()); state.data = data; renderPreview();
+});
+
+/* ================================================================
+   Excel 書き出し（SheetJS・カラム幅自動調整）
+   ツールバーの常時表示ボタン（btnExcelTop）とプレビュー下部の
+   ボタン（btnExcel）の両方がこの共通関数を呼ぶ。
+   ================================================================ */
+async function exportExcel(){
+  let data;
+  if(state.combineMode){
+    if(state.combineStale || !state.combinedData){
+      setStatus('ガイド線の変更を反映するため、全ページを連結し直しています…','busy');
+      try{ await rebuildCombined(); }
+      catch(err){ console.error(err); setStatus('連結し直しに失敗しました：' + (err && err.message ? err.message : err)); return; }
+    }else{
+      state.combinedData = syncDataFromDom(); // 連結プレビュー上の編集を反映
+    }
+    data = state.combinedData;
+  }else{
+    data = syncDataFromDom();
+  }
+  if(!data.length || !data[0].length){ setStatus('書き出すデータがありません。先にファイルを読み込んでください。'); return; }
+  if(typeof XLSX === 'undefined'){ setStatus('SheetJS（xlsx）の読み込みに失敗しました（ネットワークを確認してください）'); return; }
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const charW = s => [...String(s??'')].reduce((a,ch)=> a + (ch.charCodeAt(0) > 0xFF ? 2 : 1), 0);
+  const cols = data[0].length;
+  ws['!cols'] = Array.from({length: cols}, (_,c)=>{
+    let max = 8;
+    for(const row of data){
+      for(const line of String(row[c] ?? '').split('\n')) max = Math.max(max, charW(line));
+    }
+    return { wch: clamp(max + 2, 8, 60) };
+  });
+  ws['!rows'] = data.map(row => {
+    const lines = Math.max(1, ...row.map(v=> String(v??'').split('\n').length));
+    return lines > 1 ? { hpt: lines * 15 } : {};
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '抽出表');
+  const suffix = state.combineMode ? '_all' : (state.kind === 'pdf' && state.pageCount > 1 ? `_p${state.pageNum}` : '');
+  XLSX.writeFile(wb, `${state.fileBase}${suffix}.xlsx`);
+  setStatus('Excelファイルをダウンロードしました。','ok');
+}
+$('btnExcel').addEventListener('click', exportExcel);
+$('btnExcelTop').addEventListener('click', exportExcel);
+
+/* 初期描画（空のルーラー） */
+refreshExcelButtons();
+layoutStage();
+</script>
+</body>
+</html>
